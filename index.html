@@ -1,15 +1,29 @@
-<input type="file" id="asd">
+<script src="netplay.js"></script>
+
+Room Name: <input id="name"><br><br>
+
+<button id="Create">Create Room</button><br><br>
+<button id="join">Join Room</button>
+
+<br><br>
+
+Send Message: <input id="msg"><br><br>
+<button id="send">Join Room</button>
+
 <script>
-asd.addEventListener('change', function(e) {
-    if (socket.readyState !== 1) return;
-    socket.send('Incoming file');
-    e.target.files[0].arrayBuffer().then(function(blob) {
-        socket.send(blob);
-    });
-})
-const socket = new WebSocket('ws://localhost:8887');
-console.log(socket);
-// Connection opened
+const name = document.getElementById('name');
+Create.onclick = function() {
+    window.a = new EJS_NETPLAY(true, name.value, "Bob", "ws://localhost:8887", 5, "localhost");
+}
+join.onclick = function() {
+    window.a = new EJS_NETPLAY(false, name.value, "Steve", "ws://localhost:8887", 5, "localhost");
+}
+send.onclick = function() {
+    window.a.socket.send(document.getElementById("msg").value);
+}
+
+
+/*
 socket.addEventListener('open', (event) => {
     socket.send('Hello Server!');
 });
@@ -21,5 +35,5 @@ socket.addEventListener('message', (event) => {
 socket.addEventListener('error', (event) => {
     console.log('Error ', event.data);
 });
-
+*/
 </script>

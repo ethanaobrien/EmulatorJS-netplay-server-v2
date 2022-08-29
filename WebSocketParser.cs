@@ -24,21 +24,19 @@ public class WebSocketParser {
         this.handler = handler;
     }
     public void streamBytes(Room room) {
-        var dest = new ArrayList();
-        for (int i=0; i<room.Users.Count; i++) {
-            dest.Add(((NetplayUser) room.Users[i]).Connection);
-        }
+        var dest = new List<WebSocketParser>();
+        dest.AddRange(room.Users);
         streamBytes(dest);
     }
-    public void streamBytes(ArrayList dest) {
+    public void streamBytes(List<WebSocketParser> dest) {
         if (dest.Count == 0) return;
-        for (int i=0; i<dest.Count; i++) {
+        foreach(var parser in dest) {
             //Wait for all WebSockets to be ready to send data
-            while (((WebSocketParser) dest[i]).sendingData) {
+            while (parser.sendingData) {
                 Thread.Sleep(10);
             }
-            ((WebSocketParser) dest[i]).setSendingData(true);
-            ((WebSocketParser) dest[i]).writeHeader(this.length-this.consumed, this.inIsString);
+            parser.setSendingData(true);
+            parser.writeHeader(this.length-this.consumed, this.inIsString);
         }
         while (this.length != this.consumed) {
             ulong len = this.speed;
@@ -46,12 +44,12 @@ public class WebSocketParser {
                 len = this.length-this.consumed;
             }
             byte[] data = this.readBytes(len);
-            for (int i=0; i<dest.Count; i++) {
-                ((WebSocketParser) dest[i]).writeBytes(data, this.inIsString, false);
+            foreach(var parser in dest) {
+                parser.writeBytes(data, this.inIsString, false);
             }
         }
-        for (int i=0; i<dest.Count; i++) {
-            ((WebSocketParser) dest[i]).setSendingData(false);
+        foreach(var parser in dest) {
+            parser.setSendingData(false);
         }
     }
     public String readBytesAsString() {

@@ -23,12 +23,19 @@ public struct Room {
     public Room(String room) {
         this.name = room;
     }
-    public override bool Equals(Object other) {
-        Room otherRoom = other as Room;
-        if(otherRoom == null) {
-            return false;
-        }
+    public override bool Equals(object other) {
+        if(other is null) return false;
+        if(!(other is Room)) return false;
+        Room otherRoom = (Room) other;
         return otherRoom.name.Equals(this.name);
+    }
+
+    public static bool operator ==(Room r1, Room r2) {
+        return r1.Equals(r2);
+    }
+
+    public static bool operator !=(Room r1, Room r2) {
+        return !r1.Equals(r2);
     }
 }
 public struct Game {

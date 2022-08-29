@@ -178,7 +178,10 @@ public class WebSocketParser {
         return this.handler.GetHashCode();
     }
     public override bool Equals(Object otherObj) {
-        WebSocketParser other = (WebSocketParser) otherObj;
+        WebSocketParser other = otherObj as WebSocketParser;
+        if(other == null) {
+            return false;
+        }
         return other.handler.Equals(handler);
     }
 }

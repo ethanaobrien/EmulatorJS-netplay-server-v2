@@ -24,7 +24,10 @@ public struct Room {
         this.name = room;
     }
     public override bool Equals(Object other) {
-        Room otherRoom = (Room) other;
+        Room otherRoom = other as Room;
+        if(otherRoom == null) {
+            return false;
+        }
         return otherRoom.name.Equals(this.name);
     }
 }
@@ -238,7 +241,10 @@ public class NetplayUser {
         }
     }
     public override bool Equals(Object other) {
-        NetplayUser OtherUser = (NetplayUser) other;
+        NetplayUser OtherUser = other as NetplayUser;
+        if(OtherUser == null) {
+            return false;
+        }
         return (
             OtherUser.RoomName().Equals(this.RoomName()) &&
             OtherUser.UserName().Equals(this.UserName()) &&

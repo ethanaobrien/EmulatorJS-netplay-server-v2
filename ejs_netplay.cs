@@ -247,9 +247,9 @@ public class NetplayUser {
             netplay.DisconnectFromRoom(user);
         }
     }
-    public override bool Equals(Object other) {
+    public override bool Equals(object other) {
         NetplayUser OtherUser = other as NetplayUser;
-        if(OtherUser == null) {
+        if(OtherUser is null) {
             return false;
         }
         return (
@@ -258,5 +258,13 @@ public class NetplayUser {
             OtherUser.Site().Equals(this.Site()) &&
             OtherUser.SiteID().Equals(this.SiteID())
         );
+    }
+    public static bool operator ==(NetplayUser u1, NetplayUser u2) {
+        if(u1 is null) return false;
+        return u1.Equals(u2);
+    }
+    public static bool operator !=(NetplayUser u2, NetplayUser u2) {
+        if(u1 is null) return false;
+        return !u1.Equals(u2)
     }
 }

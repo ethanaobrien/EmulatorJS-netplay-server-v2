@@ -177,11 +177,21 @@ public class WebSocketParser {
     public override int GetHashCode() {
         return this.handler.GetHashCode();
     }
-    public override bool Equals(Object otherObj) {
+    public override bool Equals(object otherObj) {
         WebSocketParser other = otherObj as WebSocketParser;
         if(other == null) {
             return false;
         }
         return other.handler.Equals(handler);
+    }
+
+    public static bool operator ==(WebSocketParser p1, WebSocketParser p2) {
+        if(p1 is null) return false;
+        return p1.Equals(p2);
+    }
+
+     public static bool operator ==(WebSocketParser p1, WebSocketParser p2) {
+        if(p1 is null) return false;
+        return !p1.Equals(p2);
     }
 }

@@ -9,25 +9,24 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
 
-public struct Site {
-    public List<Game> Games = new List<Game>();
-    public String site;
-    public Site(String name) {
-        this.site = name;
-    }
-}
 public struct Room {
     public List<NetplayUser> Users = new List<NetplayUser>();
     public String name;
+    public String id;
     public int MaxUsers = 4;
-    public Room(String room) {
+    public Room(String room, String id) {
         this.name = room;
+        this.id = id;
+    }
+    public Room() {
+        this.name = "null";
+        this.id = "null";
     }
     public override bool Equals(object other) {
         if(other is null) return false;
         if(!(other is Room)) return false;
         Room otherRoom = (Room) other;
-        return otherRoom.name.Equals(this.name);
+        return otherRoom.id.Equals(this.id);
     }
 
     public static bool operator ==(Room r1, Room r2) {
@@ -38,43 +37,16 @@ public struct Room {
         return !r1.Equals(r2);
     }
 }
-public struct Game {
-    public List<Room> Rooms = new List<Room>();
-    public String id;
-    public Game(String id) {
-        this.id = id;
-    }
-}
 
 public class RoomsManager {
-    private List<Site> sites = new List<Site>();
-    public Site GetSite(String site) {
-        for (int i=0; i<sites.Count; i++) {
-            if (sites[i].site.Equals(site)) {
-                return sites[i];
-            }
-        }
-        return new Site("null");
-    }
-    public Game GetGameID(String site, String id) {
-        Site rooms = GetSite(site);
-        if (rooms.site.Equals("null")) return new Game("null");
-        for (int i=0; i<rooms.Games.Count; i++) {
-            if (rooms.Games[i].id.Equals(id)) {
-                return rooms.Games[i];
-            }
-        }
-        return new Game("null");
-    }
+    private List<Room> Rooms = new List<Room>();
     public Room GetRoom(String site, String id, String name) {
-        Game games = GetGameID(site, id);
-        if (games.id.Equals("null")) return new Room("null");
-        for (int i=0; i<games.Rooms.Count; i++) {
-            if (games.Rooms[i].name.Equals(name)) {
-                return games.Rooms[i];
+        for (int i=0; i<Rooms.Count; i++) {
+            if (Rooms[i].id.Equals(site+"-"+id+"-"+name)) {
+                return Rooms[i];
             }
         }
-        return new Room("null");
+        return new Room();
     }
     public bool RoomExists(String room, String site, String id) {
         return !(GetRoom(site, id, room).name.Equals("null"));
@@ -86,19 +58,9 @@ public class RoomsManager {
     }
     public bool CreateRoom(NetplayUser user, String site, String id, String name) {
         if (RoomExists(name, site, id)) return false;
-        Site ids = GetSite(site);
-        if (ids.site.Equals("null")) {
-            ids = new Site(site);
-            sites.Add(ids);
-        }
-        Game games = GetGameID(site, id);
-        if (games.id.Equals("null")) {
-            games = new Game(id);
-            ids.Games.Add(games);
-        }
-        Room room = new Room(name);
+        Room room = new Room(name, site+"-"+id+"-"+name);
         room.Users.Add(user);
-        games.Rooms.Add(room);
+        Rooms.Add(room);
         return true;
     }
     public bool JoinRoom(NetplayUser user, String site, String id, String name) {
@@ -108,9 +70,8 @@ public class RoomsManager {
         return true;
     }
     public void DeleteRoom(String site, String id, String name) {
-        Game games = GetGameID(site, id);
         Room room = GetRoom(site, id, name);
-        games.Rooms.Remove(room); //need to fix
+        Rooms.Remove(room); //need to fix
     }
     public void RemoveUser(NetplayUser user, String site, String id, String name, String UserName) {
         Room room = GetRoom(site, id, name);
@@ -132,7 +93,7 @@ public class NetplayManager {
     public bool JoinRoom(NetplayUser user) {
         if (!manager.RoomExists(user.RoomName(), user.Site(), user.SiteID())) return false;
         if (manager.RoomFull(user.RoomName(), user.Site(), user.SiteID())) return false;
-        return manager.JoinRoom(user, user.RoomName(), user.Site(), user.SiteID());
+        return manager.JoinRoom(user, user.Site(), user.SiteID(), user.RoomName());
     }
     public void DeleteRoom(NetplayUser user) {
         manager.DeleteRoom(user.Site(), user.SiteID(), user.RoomName());
@@ -144,9 +105,10 @@ public class NetplayManager {
         if (url.IndexOf("?") == -1) return "[]";
         String site = url.Substring(url.IndexOf("site=")+5).Split('&')[0];
         String id = url.Substring(url.IndexOf("id=")+3).Split('&')[0];
+        String rv = "[";
+        /*
         Game games = manager.GetGameID(site, id);
         if (games.id.Equals("null")) return "[]";
-        String rv = "[";
         for (int i=0; i<games.Rooms.Count; i++) {
             if (i>0) {
                 rv += ",";
@@ -160,6 +122,7 @@ public class NetplayManager {
                 "}"
             );
         }
+        */
         rv += "]";
         return rv;
     }
@@ -205,6 +168,7 @@ public class NetplayUser {
             bool joined = netplay.OpenRoom(user);
             Console.WriteLine("Opened: "+joined);
             if (!joined) {
+                this.Connection.writeString("Error Connecting");
                 this.Connection.closeSocket();
                 return;
             }
@@ -217,6 +181,7 @@ public class NetplayUser {
             bool joined = netplay.JoinRoom(user);
             Console.WriteLine("Joined: "+joined);
             if (!joined) {
+                this.Connection.writeString("Error Connecting");
                 this.Connection.closeSocket();
                 return;
             }
@@ -263,8 +228,8 @@ public class NetplayUser {
         if(u1 is null) return false;
         return u1.Equals(u2);
     }
-    public static bool operator !=(NetplayUser u2, NetplayUser u2) {
+    public static bool operator !=(NetplayUser u1, NetplayUser u2) {
         if(u1 is null) return false;
-        return !u1.Equals(u2)
+        return !u1.Equals(u2);
     }
 }

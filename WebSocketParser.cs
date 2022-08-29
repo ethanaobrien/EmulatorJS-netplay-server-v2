@@ -25,7 +25,9 @@ public class WebSocketParser {
     }
     public void streamBytes(Room room) {
         var dest = new List<WebSocketParser>();
-        dest.AddRange(room.Users);
+		for (int i=0; i<room.Users.Count; i++) {
+			dest.Add(room.Users[i].Connection);
+		}
         streamBytes(dest);
     }
     public void streamBytes(List<WebSocketParser> dest) {
@@ -188,7 +190,7 @@ public class WebSocketParser {
         return p1.Equals(p2);
     }
 
-     public static bool operator ==(WebSocketParser p1, WebSocketParser p2) {
+     public static bool operator !=(WebSocketParser p1, WebSocketParser p2) {
         if(p1 is null) return false;
         return !p1.Equals(p2);
     }

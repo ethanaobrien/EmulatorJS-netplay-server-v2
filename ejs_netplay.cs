@@ -48,6 +48,15 @@ public class RoomsManager {
         }
         return new Room();
     }
+    public List<Room> GetRooms(String site, String id) {
+        List<Room> rooms = new List<Room>();
+        for (int i=0; i<Rooms.Count; i++) {
+            if (Rooms[i].id.StartsWith(site+"-"+id)) {
+                rooms.Add(Rooms[i]);
+            }
+        }
+        return rooms;
+    }
     public bool RoomExists(String room, String site, String id) {
         return !(GetRoom(site, id, room).name.Equals("null"));
     }
@@ -106,23 +115,19 @@ public class NetplayManager {
         String site = url.Substring(url.IndexOf("site=")+5).Split('&')[0];
         String id = url.Substring(url.IndexOf("id=")+3).Split('&')[0];
         String rv = "[";
-        /*
-        Game games = manager.GetGameID(site, id);
-        if (games.id.Equals("null")) return "[]";
-        for (int i=0; i<games.Rooms.Count; i++) {
+        List<Room> rooms = manager.GetRooms(site, id);
+        for (int i=0; i<rooms.Count; i++) {
             if (i>0) {
                 rv += ",";
             }
-            Room room = ((Room) games.Rooms[i]);
             rv += (
                 "{"+
-                "\"name\": \""+room.name.Replace("\"", "\\\"")+"\","+
-                "\"users\": "+room.Users.Count+","+
-                "\"max_users\": "+room.MaxUsers+
+                "\"name\": \""+rooms[i].name.Replace("\"", "\\\"")+"\","+
+                "\"users\": "+rooms[i].Users.Count+","+
+                "\"max_users\": "+rooms[i].MaxUsers+
                 "}"
             );
         }
-        */
         rv += "]";
         return rv;
     }

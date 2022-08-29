@@ -25,9 +25,9 @@ public class WebSocketParser {
     }
     public void streamBytes(Room room) {
         var dest = new List<WebSocketParser>();
-		for (int i=0; i<room.Users.Count; i++) {
-			dest.Add(room.Users[i].Connection);
-		}
+        for (int i=0; i<room.Users.Count; i++) {
+            dest.Add(room.Users[i].Connection);
+        }
         streamBytes(dest);
     }
     public void streamBytes(List<WebSocketParser> dest) {

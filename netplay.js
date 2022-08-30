@@ -25,11 +25,11 @@ function EJS_NETPLAY(createRoom, room, name, socketURL, id, requestedSite) {
     }
     let site;
     if (requestedSite) {
-        try {
-            site = (new URL(requestedSite)).host;
-        } catch(e) {
-            console.warn("Could not set url to \""+requestedSite+"\". There was an error parsing the URL. Using "+window.location.host);
+        if (typeof requestedSite !== "string") {
+            console.warn("Invalid type for argument requestedSite. Using "+window.location.host);
             site = window.location.host;
+        } else {
+            site = requestedSite;
         }
     } else {
         site = window.location.host;
@@ -49,7 +49,7 @@ EJS_NETPLAY.prototype = {
     init: async function() {
         this.joined = false;
         this.error = false;
-        await this.openSocket(socketURL);
+        await this.openSocket(this.opts.socketURL);
         if (this.opts.createRoom) {
             this.createRoom(this.opts.room, this.opts.name, this.opts.id, this.opts.site);
         } else {
@@ -84,8 +84,8 @@ EJS_NETPLAY.prototype = {
         return new Promise((resolve, reject) => {
             this.socket = new WebSocket(socketURL);
             this.socket.addEventListener('open', resolve);
-            this.socket.addEventListener('close', this.onClose);
-            this.socket.addEventListener('message', this.onMessage);
+            this.socket.addEventListener('close', this.onClose.bind(this));
+            this.socket.addEventListener('message', this.onMessage.bind(this));
         })
     },
     onClose: function(e) {

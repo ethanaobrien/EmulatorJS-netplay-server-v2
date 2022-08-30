@@ -14,15 +14,21 @@ Send Message: <input id="msg"><br><br>
 const name = document.getElementById('name');
 Create.onclick = function() {
     window.a = new EJS_NETPLAY(true, name.value, "Bob", "ws://localhost:8887", 5, "localhost");
+    a.on("keydown", function(e) {
+        console.log(e);
+    })
     a.init();
 }
 join.onclick = function() {
     window.a = new EJS_NETPLAY(false, name.value, "Steve", "ws://localhost:8887", 5, "localhost");
+    a.on("keydown", function(e) {
+        console.log(e);
+    })
     a.init();
 }
-send.onclick = function() {
-    window.a.socket.send(document.getElementById("msg").value);
-}
+document.addEventListener('keydown', function(e) {
+    if (window.a) a.keyDown(e.key);
+})
 
 
 /*

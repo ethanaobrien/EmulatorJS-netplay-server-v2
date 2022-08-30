@@ -34,6 +34,7 @@ function EJS_NETPLAY(createRoom, room, name, socketURL, id, requestedSite) {
     } else {
         site = window.location.host;
     }
+    this.owner = createRoom;
     this.opts = {
         createRoom,
         room,
@@ -112,27 +113,40 @@ EJS_NETPLAY.prototype = {
             return;
         } else if (e.data && typeof e.data === "string") {
             if (e.data.startsWith("User Connected")) {
-                const name = e.data.substring(16).trim();
-                if (this.listeners.userconnection) {
-                    this.listeners.userconnection({name:name});
+                if (this.owner) { //Lets have the owner keep track of all this stuff
+                    const name = e.data.substring(16).trim();
+                    this.callListener("userdatachanged");
+                    this.users.push(name);
+                    this.socket.send("userDataChanged:"+JSON.stringify(this.users));
                 }
-                this.users.push(name);
             } else if (e.data.startsWith("User Disonnected")) {
-                const name = e.data.substring(18).trim();
-                if (this.listeners.userdisconnection) {
-                    this.listeners.userdisconnection({name:name});
+                if (this.owner) {
+                    const name = e.data.substring(18).trim();
+                    this.callListener("userdatachanged");
+                    const index = array.indexOf(name);
+                    if (index > -1) {
+                        this.users.splice(index, 1);
+                    }
+                    this.socket.send("userDataChanged:"+JSON.stringify(this.users));
                 }
-                const index = array.indexOf(name);
-                if (index > -1) {
-                    this.users.splice(index, 1);
-                }
-            } else if (e.data.startsWith("keydown:")) {
+            } else if (e.data.startsWith("userDataChanged:")) {
                 let data;
                 try {
-                    data = JSON.parse(e.data.substring(8));
-                } catch(e) {};
-                if (!data) {
-                    console.warn("error parsing incoming keydown data.", e.data);
+                    data = JSON.parse(e.data.substring(16));
+                } catch(e) {
+                    console.warn("Error parsing updated user data.");
+                    return;
+                }
+                this.users = data;
+                this.callListener("userdatachanged");
+            } else if (e.data.startsWith("sync-control:")) {
+                let data;
+                const userNum = this.users.indexOf(this.opts.name);
+                try {
+                    data = JSON.parse(e.data.substring(13));
+                } catch(e) {
+                    console.warn("Error parsing sync control data.");
+                    return;
                 }
                 if (this.listeners.keydown) {
                     this.listeners.keydown(data);
@@ -143,7 +157,18 @@ EJS_NETPLAY.prototype = {
     },
     //data - json string of data to be called as an event on the other users
     keyDown: function(data) {
-        this.socket.send("keydown:"+JSON.stringify(data));
+        let message = {};
+        message.data = data;
+        message.type = "keyDown";
+        message.player = this.users.indexOf(this.opts.name);
+        this.socket.send("sync-control:"+JSON.stringify(message));
+    },
+    keyUp: function(data) {
+        let message = {};
+        message.data = data;
+        message.type = "keyUp";
+        message.player = this.users.indexOf(this.opts.name);
+        this.socket.send("sync-control:"+JSON.stringify(message));
     },
     users: [],
     getUsers: function() {
@@ -152,7 +177,32 @@ EJS_NETPLAY.prototype = {
     //This function is to be set as Module.postMainLoop - will keep the players in sync
     //All this is based off the user that owns the room.
     //This function keeps the inputs in sync with the frames - so chances are I'll need to re-write the way I do inputs.
+    //currentFrame: 0,
     postMainLoop: function() {
+        //I have a better Idea that may not require this - lets wait and see
+        /*
+        if (this.owner) {
+            let _0xa88a13 = [];
+            for (const i=this.currentFrame-1; i<this.currentFrame; i++) {
+                if (_0x378b5c.inputsData[i]) {
+                    _0x378b5c.inputsData[i].forEach(function(_0x2a02da, _0x1b2066) {
+                        _0xa88a13.push('' .concat(_0x2a02da.index, '|').concat(_0x2a02da.key, '|').concat(_0x2a02da.status, '|').concat(_0x2a02da.frame));
+                    })
+                } else {
+                    //_0xa88a13.push('-1|||' .concat(i));
+                }
+            }
+            this.socket.send("sync-control:"+JSON.stringify(_0xa88a13));
+            if (_0x378b5c.currentFrame % 100 === 0) {
+                Object.keys(_0x378b5c.inputsData).forEach(function(_0x3125e4, _0x31ea67) {
+                    if (_0x3125e4 < _0x378b5c.currentFrame - 50) {
+                        delete _0x378b5c.inputsData[_0x3125e4];
+                    }
+                })
+            }
+        }
+        currentFrame++;
+        */
         //Todo - I have no clue how to even start - Chances are I'll be referencing the old code.
         //See https://github.com/ethanaobrien/emulatorjs/blob/ae1d574242421e1d8dc01b3b25720d62881fa7cc/data/emu-main.js#L3195
     },

@@ -41,18 +41,18 @@ public struct Room {
 public class RoomsManager {
     private List<Room> Rooms = new List<Room>();
     public Room GetRoom(String site, String id, String name) {
-        for (int i=0; i<Rooms.Count; i++) {
-            if (Rooms[i].id.Equals(site+"-"+id+"-"+name)) {
-                return Rooms[i];
+        foreach (Room room in Rooms) {
+            if (Room.id.Equals(site+"-"+id+"-"+name)) {
+                return Room;
             }
         }
         return new Room();
     }
     public List<Room> GetRooms(String site, String id) {
         List<Room> rooms = new List<Room>();
-        for (int i=0; i<Rooms.Count; i++) {
-            if (Rooms[i].id.StartsWith(site+"-"+id)) {
-                rooms.Add(Rooms[i]);
+        foreach (Room room in Rooms) {
+            if (Room.id.StartsWith(site+"-"+id)) {
+                rooms.Add(Room);
             }
         }
         return rooms;
@@ -80,7 +80,7 @@ public class RoomsManager {
     }
     public void DeleteRoom(String site, String id, String name) {
         Room room = GetRoom(site, id, name);
-        Rooms.Remove(room); //need to fix
+        Rooms.Remove(room);
     }
     public void RemoveUser(NetplayUser user, String site, String id, String name, String UserName) {
         Room room = GetRoom(site, id, name);
@@ -116,15 +116,15 @@ public class NetplayManager {
         String id = url.Substring(url.IndexOf("id=")+3).Split('&')[0];
         String rv = "[";
         List<Room> rooms = manager.GetRooms(site, id);
-        for (int i=0; i<rooms.Count; i++) {
+        foreach (Room room in rooms) {
             if (i>0) {
                 rv += ",";
             }
             rv += (
                 "{"+
-                "\"name\": \""+rooms[i].name.Replace("\"", "\\\"")+"\","+
-                "\"users\": "+rooms[i].Users.Count+","+
-                "\"max_users\": "+rooms[i].MaxUsers+
+                "\"name\": \""+room.name.Replace("\"", "\\\"")+"\","+
+                "\"users\": "+room.Users.Count+","+
+                "\"max_users\": "+room.MaxUsers+
                 "}"
             );
         }
@@ -135,6 +135,7 @@ public class NetplayManager {
 
 public class NetplayUser {
     public Socket handler;
+    private bool debug = true;
     public WebSocketParser Connection;
     private String RoomName1;
     public String RoomName() {return this.RoomName1;}
@@ -155,6 +156,8 @@ public class NetplayUser {
             Thread.Sleep(10);
         };
         if (!Connection.clientConnected()) return;
+        //Once we connect the user - we do nothing. Mostly everything is client site
+        //(It's cheaper and easier that way).
         String request = Connection.readBytesAsString();
         String[] parts = request.Split('\n');
         if (parts[0].Equals("OpenRoom")) {
@@ -171,7 +174,7 @@ public class NetplayUser {
             Console.WriteLine("Site ID: "+parts[4]);
             */
             bool joined = netplay.OpenRoom(user);
-            Console.WriteLine("Opened: "+joined);
+            if (debug) Console.WriteLine("Opened: "+joined);
             if (!joined) {
                 this.Connection.writeString("Error Connecting");
                 this.Connection.closeSocket();
@@ -184,11 +187,20 @@ public class NetplayUser {
             this.Site1 = parts[3];
             this.SiteID1 = parts[4];
             bool joined = netplay.JoinRoom(user);
-            Console.WriteLine("Joined: "+joined);
+            if (debug) Console.WriteLine("Joined: "+joined);
             if (!joined) {
                 this.Connection.writeString("Error Connecting");
                 this.Connection.closeSocket();
                 return;
+            }
+            Room room = netplay.manager.GetRoom(Site1, SiteID1, RoomName1);
+            if (room.name.Equals("null")) {
+                this.Connection.writeString("Error Connecting");
+                this.Connection.closeSocket();
+                return;
+            }
+            foreach (var user in room.Users) {
+                user.Connection.writeString("User Connected: "+this.UserName1);
             }
         } else {
             this.Connection.closeSocket();
@@ -206,8 +218,10 @@ public class NetplayUser {
             Room room = netplay.manager.GetRoom(Site1, SiteID1, RoomName1);
             if (room.name.Equals("null")) {
                 this.Connection.closeSocket();
-                return;
+                break;
             }
+            //We (the server) dont need to monitor the data after the initial connection
+            //so we just echo the bytes back to the room.
             Connection.streamBytes(room);
             
         }
@@ -215,6 +229,11 @@ public class NetplayUser {
             netplay.DeleteRoom(user);
         } else {
             netplay.DisconnectFromRoom(user);
+            Room room = netplay.manager.GetRoom(Site1, SiteID1, RoomName1);
+            if (room.name.Equals("null")) return;
+            foreach (var user in room.Users) {
+                user.Connection.writeString("User Disconnected: "+this.UserName1);
+            }
         }
     }
     public override bool Equals(object other) {

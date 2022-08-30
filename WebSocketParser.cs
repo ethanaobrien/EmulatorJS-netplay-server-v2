@@ -25,8 +25,8 @@ public class WebSocketParser {
     }
     public void streamBytes(Room room) {
         var dest = new List<WebSocketParser>();
-        for (int i=0; i<room.Users.Count; i++) {
-            dest.Add(room.Users[i].Connection);
+        foreach (var user in room.Users) {
+            dest.Add(user.Connection);
         }
         streamBytes(dest);
     }
@@ -74,16 +74,25 @@ public class WebSocketParser {
         return decoded;
     }
     public void writeString(String data) {
+        while (sendingData) {
+            Thread.Sleep(10);
+        }
         sendingData = true;
         this.writeBytes(Encoding.UTF8.GetBytes(data), true, true);
         sendingData = false;
     }
     public void writeBytes(byte[] data) {
+        while (sendingData) {
+            Thread.Sleep(10);
+        }
         sendingData = true;
         this.writeBytes(data, false, true);
         sendingData = false;
     }
     public void writeBytes(byte[] data, bool isString) {
+        while (sendingData) {
+            Thread.Sleep(10);
+        }
         sendingData = true;
         this.writeBytes(data, false, true);
         sendingData = false;

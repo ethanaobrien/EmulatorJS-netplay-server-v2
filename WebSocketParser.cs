@@ -13,12 +13,25 @@ public class WebSocketParser {
     public byte[] mask = new byte[4];
     public ulong length = 0;
     private ulong consumed = 0;
-    private ulong speed = 1024;
+    private ulong speed = 1024*1024;
     public Socket handler = null;
     public bool inIsString = false;
     public bool sendingData = false;
-    public void setSendingData(bool tr) {
-        this.sendingData = tr;
+    public List<int> QueueList = new List<int>();
+    private Random rd = new Random();
+    public int AddToQueue() {
+        int value = rd.Next(0,1147483647);
+        while (QueueList.IndexOf(value) != -1) {
+            value = rd.Next(0,1147483647);
+        }
+        QueueList.Add(value);
+        return value;
+    }
+    public bool CheckQueue(int QueueNum) {
+        return (QueueList.IndexOf(QueueNum) == 0);
+    }
+    public void RemoveQueue(int QueueNum) {
+        QueueList.Remove(QueueNum);
     }
     public WebSocketParser(Socket handler) {
         this.handler = handler;
@@ -32,12 +45,16 @@ public class WebSocketParser {
     }
     public void streamBytes(List<WebSocketParser> dest) {
         if (dest.Count == 0) return;
+        List<int> queue = new List<int>();
         foreach(var parser in dest) {
+            int val = parser.AddToQueue();
             //Wait for all WebSockets to be ready to send data
-            while (parser.sendingData) {
+            while (!parser.CheckQueue(val)) {
                 Thread.Sleep(10);
             }
-            parser.setSendingData(true);
+            queue.Add(val);
+        }
+        foreach(var parser in dest) {
             parser.writeHeader(this.length-this.consumed, this.inIsString);
         }
         while (this.length != this.consumed) {
@@ -51,7 +68,9 @@ public class WebSocketParser {
             }
         }
         foreach(var parser in dest) {
-            parser.setSendingData(false);
+            foreach (var val in queue) {
+                parser.RemoveQueue(val);
+            }
         }
     }
     public String readBytesAsString() {
@@ -74,28 +93,28 @@ public class WebSocketParser {
         return decoded;
     }
     public void writeString(String data) {
-        while (sendingData) {
+        int num = AddToQueue();
+        while (!CheckQueue(num)) {
             Thread.Sleep(10);
         }
-        sendingData = true;
         this.writeBytes(Encoding.UTF8.GetBytes(data), true, true);
-        sendingData = false;
+        RemoveQueue(num);
     }
     public void writeBytes(byte[] data) {
-        while (sendingData) {
+        int num = AddToQueue();
+        while (!CheckQueue(num)) {
             Thread.Sleep(10);
         }
-        sendingData = true;
         this.writeBytes(data, false, true);
-        sendingData = false;
+        RemoveQueue(num);
     }
     public void writeBytes(byte[] data, bool isString) {
-        while (sendingData) {
+        int num = AddToQueue();
+        while (!CheckQueue(num)) {
             Thread.Sleep(10);
         }
-        sendingData = true;
         this.writeBytes(data, false, true);
-        sendingData = false;
+        RemoveQueue(num);
     }
     public void writeBytes(byte[] data, bool isString, bool header) {
         if (header) {

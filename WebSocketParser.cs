@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -13,28 +14,31 @@ public class WebSocketParser {
     public byte[] mask = new byte[4];
     public ulong length = 0;
     private ulong consumed = 0;
-    private ulong speed = 1024*1024;
     public Socket handler = null;
     public bool inIsString = false;
-    public bool sendingData = false;
-    public List<int> QueueList = new List<int>();
-    private Random rd = new Random();
-    public int AddToQueue() {
-        int value = rd.Next(0,1147483647);
-        while (QueueList.IndexOf(value) != -1) {
-            value = rd.Next(0,1147483647);
+    ConcurrentQueue<byte[]> WriteBuffer = new ConcurrentQueue<byte[]>();
+    public void AddToQueue(byte[] header, byte[] data) {
+        WriteBuffer.Enqueue(header);
+        WriteBuffer.Enqueue(data);
+    }
+    public void ProcessQueue() {
+        while (this.handler.Connected) {
+            while (WriteBuffer.Count == 0 && this.handler.Connected) {
+                Thead.Sleep(10);
+            }
+            if (!this.handler.Connected) return;
+            byte[] data;
+            while (WriteBuffer.TryDequeue(out data)) {
+                this.handler.Send(data);
+            }
         }
-        QueueList.Add(value);
-        return value;
     }
-    public bool CheckQueue(int QueueNum) {
-        return (QueueList.IndexOf(QueueNum) == 0);
-    }
-    public void RemoveQueue(int QueueNum) {
-        QueueList.Remove(QueueNum);
-    }
+
+
     public WebSocketParser(Socket handler) {
         this.handler = handler;
+        Thread t = new Thread(ProcessQueue);
+        t.Start();
     }
     public void streamBytes(Room room) {
         var dest = new List<WebSocketParser>();
@@ -46,31 +50,10 @@ public class WebSocketParser {
     public void streamBytes(List<WebSocketParser> dest) {
         if (dest.Count == 0) return;
         List<int> queue = new List<int>();
+        byte[] header = GetHeader(this.length-this.consumed, this.inIsString);
+        byte[] data = this.readBytes(this.length-this.consumed);
         foreach(var parser in dest) {
-            int val = parser.AddToQueue();
-            //Wait for all WebSockets to be ready to send data
-            while (!parser.CheckQueue(val)) {
-                Thread.Sleep(10);
-            }
-            queue.Add(val);
-        }
-        foreach(var parser in dest) {
-            parser.writeHeader(this.length-this.consumed, this.inIsString);
-        }
-        while (this.length != this.consumed) {
-            ulong len = this.speed;
-            if (this.length-this.consumed < len) {
-                len = this.length-this.consumed;
-            }
-            byte[] data = this.readBytes(len);
-            foreach(var parser in dest) {
-                parser.writeBytes(data, this.inIsString, false);
-            }
-        }
-        foreach(var parser in dest) {
-            foreach (var val in queue) {
-                parser.RemoveQueue(val);
-            }
+            parser.AddToQueue(header, data);
         }
     }
     public String readBytesAsString() {
@@ -93,36 +76,16 @@ public class WebSocketParser {
         return decoded;
     }
     public void writeString(String data) {
-        int num = AddToQueue();
-        while (!CheckQueue(num)) {
-            Thread.Sleep(10);
-        }
-        this.writeBytes(Encoding.UTF8.GetBytes(data), true, true);
-        RemoveQueue(num);
+        byte toWrite = Encoding.UTF8.GetBytes(data);
+        AddToQueue(GetHeader((ulong)toWrite.Length, true), toWrite);
     }
     public void writeBytes(byte[] data) {
-        int num = AddToQueue();
-        while (!CheckQueue(num)) {
-            Thread.Sleep(10);
-        }
-        this.writeBytes(data, false, true);
-        RemoveQueue(num);
+        AddToQueue(GetHeader((ulong)data.Length, false), data);
     }
     public void writeBytes(byte[] data, bool isString) {
-        int num = AddToQueue();
-        while (!CheckQueue(num)) {
-            Thread.Sleep(10);
-        }
-        this.writeBytes(data, false, true);
-        RemoveQueue(num);
+        AddToQueue(GetHeader((ulong)data.Length, isString), data);
     }
-    public void writeBytes(byte[] data, bool isString, bool header) {
-        if (header) {
-            writeHeader((ulong)data.Length, isString);
-        }
-        handler.Send(data);
-    }
-    public void writeHeader(ulong len, bool isString) {
+    public byte[] GetHeader(ulong len, bool isString) {
         //Credit to https://github.com/MazyModz/CSharp-WebSocket-Server/blob/master/Library/Helpers.cs
         int indexStartRawData = -1;
         byte[] frame = new byte[10];
@@ -158,7 +121,7 @@ public class WebSocketParser {
         for (int i=0; i < indexStartRawData; i++) {
             response[i] = frame[i];
         }
-        handler.Send(response);
+        return response;
     }
     public bool clientConnected() {
         return handler.Connected;

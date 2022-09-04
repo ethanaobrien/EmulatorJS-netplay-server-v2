@@ -228,9 +228,10 @@ EJS_NETPLAY.prototype = {
                 this.userFrames[i] = null;
                 continue;
             }
+            const frameDiff = 10;
             const diff = this.currentFrame - this.userFrames[i];
-            if (diff < 100) {
-                this.socket.send("short-pause:"+i+"|"+(-(diff-100)));
+            if (diff < frameDiff && (diff+frameDiff) > 10) {
+                this.socket.send("short-pause:"+i+"|"+(diff+frameDiff));
             } else if (diff > 500) {
                 const state = await this.listeners.savestate();
                 this.socket.send("incoming_save_state:"+state.byteLength);

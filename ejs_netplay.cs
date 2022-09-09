@@ -13,14 +13,26 @@ public struct Room {
     public List<NetplayUser> Users = new List<NetplayUser>();
     public String name;
     public String id;
-    public int MaxUsers = 4;
-    public Room(String room, String id) {
+    public int MaxUsers;
+    public bool HasPassword;
+    public String Password;
+    public Room(String room, String id, int maxUsers) {
         this.name = room;
         this.id = id;
+        this.MaxUsers = maxUsers;
+        this.HasPassword = false;
+        this.Password = "";
     }
     public Room() {
         this.name = "null";
         this.id = "null";
+        this.MaxUsers = 0;
+        this.HasPassword = false;
+        this.Password = "";
+    }
+    public void SetPassword(String Password) {
+        this.Password = Password;
+        this.HasPassword = true;
     }
     public override bool Equals(object other) {
         if(other is null) return false;
@@ -65,18 +77,24 @@ public class RoomsManager {
         if (room1.name.Equals("null")) return true;
         return (room1.Users.Count >= room1.MaxUsers);
     }
-    public bool CreateRoom(NetplayUser user, String site, String id, String name) {
-        if (RoomExists(name, site, id)) return false;
-        Room room = new Room(name, site+"-"+id+"-"+name);
+    public String CreateRoom(NetplayUser user, String site, String id, String name, String Password, int MaxUsers) {
+        if (RoomExists(name, site, id)) return "Room Already Exists";
+        Room room = new Room(name, site+"-"+id+"-"+name, MaxUsers);
+        if (Password.Trim().Length > 0) {
+            room.SetPassword(Password.Trim());
+        }
         room.Users.Add(user);
         Rooms.Add(room);
-        return true;
+        return "";
     }
-    public bool JoinRoom(NetplayUser user, String site, String id, String name) {
+    public String JoinRoom(NetplayUser user, String site, String id, String name, String Password) {
         Room room = GetRoom(site, id, name);
-        if (room.name.Equals("null")) return false;
+        if (room.name.Equals("null")) return "Room not found";
+        if (room.HasPassword) {
+            if (!Password.Equals(room.Password)) return "Incorrect Password";
+        }
         room.Users.Add(user);
-        return true;
+        return "";
     }
     public void DeleteRoom(String site, String id, String name) {
         Room room = GetRoom(site, id, name);
@@ -94,15 +112,14 @@ public class NetplayManager {
     public NetplayManager() {
         
     }
-    public bool OpenRoom(NetplayUser user) {
-        if (manager.RoomExists(user.RoomName(), user.Site(), user.SiteID())) return false;
-        if (!manager.CreateRoom(user, user.Site(), user.SiteID(), user.RoomName())) return false;
-        return true;
+    public String OpenRoom(NetplayUser user) {
+        if (manager.RoomExists(user.RoomName(), user.Site(), user.SiteID())) return "Room Already Exists";
+        return manager.CreateRoom(user, user.Site(), user.SiteID(), user.RoomName(), user.Password(), int.Parse(user.RoomLimit()));
     }
-    public bool JoinRoom(NetplayUser user) {
-        if (!manager.RoomExists(user.RoomName(), user.Site(), user.SiteID())) return false;
-        if (manager.RoomFull(user.RoomName(), user.Site(), user.SiteID())) return false;
-        return manager.JoinRoom(user, user.Site(), user.SiteID(), user.RoomName());
+    public String JoinRoom(NetplayUser user) {
+        if (!manager.RoomExists(user.RoomName(), user.Site(), user.SiteID())) return "Room does not exist!";
+        if (manager.RoomFull(user.RoomName(), user.Site(), user.SiteID())) return "Room full";
+        return manager.JoinRoom(user, user.Site(), user.SiteID(), user.RoomName(), user.Password());
     }
     public void DeleteRoom(NetplayUser user) {
         manager.DeleteRoom(user.Site(), user.SiteID(), user.RoomName());
@@ -125,7 +142,8 @@ public class NetplayManager {
                 "{"+
                 "\"name\": \""+room.name.Replace("\"", "\\\"")+"\","+
                 "\"users\": "+room.Users.Count+","+
-                "\"max_users\": "+room.MaxUsers+
+                "\"max_users\": "+room.MaxUsers+","+
+                "\"password\": "+(room.HasPassword?"true":"false")+
                 "}"
             );
             yes = true;
@@ -147,6 +165,12 @@ public class NetplayUser {
     public String Site() {return this.Site1;}
     private String SiteID1;
     public String SiteID() {return this.SiteID1;}
+    
+    private String RoomLimit1;
+    public String RoomLimit() {return this.RoomLimit1;}
+    private String Password1;
+    public String Password() {return this.Password1;}
+    
     private bool IsOwner1 = false;
     public bool IsOwner() {return this.IsOwner1;}
     public NetplayUser(Socket handler) {
@@ -168,6 +192,8 @@ public class NetplayUser {
             this.UserName1 = parts[2];
             this.Site1 = parts[3];
             this.SiteID1 = parts[4];
+            this.RoomLimit1 = parts[5];
+            this.Password1 = parts[6];
             /*
             Console.WriteLine("Open Room");
             Console.WriteLine("Room Name: "+parts[1]);
@@ -175,10 +201,9 @@ public class NetplayUser {
             Console.WriteLine("Site: "+parts[3]);
             Console.WriteLine("Site ID: "+parts[4]);
             */
-            bool joined = netplay.OpenRoom(user);
-            if (debug) Console.WriteLine("Opened: "+joined);
-            if (!joined) {
-                this.Connection.writeString("Error Connecting");
+            String joined = netplay.OpenRoom(user);
+            if (joined.Trim().Length > 0) {
+                this.Connection.writeString(joined.Trim());
                 this.Connection.closeSocket();
                 return;
             }
@@ -189,10 +214,11 @@ public class NetplayUser {
             this.UserName1 = parts[2];
             this.Site1 = parts[3];
             this.SiteID1 = parts[4];
-            bool joined = netplay.JoinRoom(user);
-            if (debug) Console.WriteLine("Joined: "+joined);
-            if (!joined) {
-                this.Connection.writeString("Error Connecting");
+            this.Password1 = parts[5];
+            this.RoomLimit1 = 0;
+            String joined = netplay.JoinRoom(user);
+            if (joined.Trim().Length > 0) {
+                this.Connection.writeString(joined.Trim());
                 this.Connection.closeSocket();
                 return;
             }
@@ -250,7 +276,9 @@ public class NetplayUser {
             OtherUser.RoomName().Equals(this.RoomName()) &&
             OtherUser.UserName().Equals(this.UserName()) &&
             OtherUser.Site().Equals(this.Site()) &&
-            OtherUser.SiteID().Equals(this.SiteID())
+            OtherUser.SiteID().Equals(this.SiteID()) &&
+            OtherUser.RoomLimit().Equals(this.RoomLimit()) &&
+            OtherUser.Password().Equals(this.Password())
         );
     }
     public static bool operator ==(NetplayUser u1, NetplayUser u2) {

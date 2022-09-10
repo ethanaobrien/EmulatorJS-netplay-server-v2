@@ -133,6 +133,9 @@ public class WebSocketParser {
         return handler.Connected;
     }
     public void closeSocket() {
+        while (WriteBuffer.Count > 0) {
+            Thread.Sleep(10);
+        }
         try {
             handler.Shutdown(SocketShutdown.Both);
             handler.Close();

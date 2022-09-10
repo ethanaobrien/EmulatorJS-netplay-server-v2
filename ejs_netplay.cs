@@ -114,7 +114,7 @@ public class NetplayManager {
     }
     public String OpenRoom(NetplayUser user) {
         if (manager.RoomExists(user.RoomName(), user.Site(), user.SiteID())) return "Room Already Exists";
-        return manager.CreateRoom(user, user.Site(), user.SiteID(), user.RoomName(), user.Password(), int.Parse(user.RoomLimit()));
+        return manager.CreateRoom(user, user.Site(), user.SiteID(), user.RoomName(), user.Password(), user.RoomLimit());
     }
     public String JoinRoom(NetplayUser user) {
         if (!manager.RoomExists(user.RoomName(), user.Site(), user.SiteID())) return "Room does not exist!";
@@ -166,8 +166,8 @@ public class NetplayUser {
     private String SiteID1;
     public String SiteID() {return this.SiteID1;}
     
-    private String RoomLimit1;
-    public String RoomLimit() {return this.RoomLimit1;}
+    private int RoomLimit1;
+    public int RoomLimit() {return this.RoomLimit1;}
     private String Password1;
     public String Password() {return this.Password1;}
     
@@ -192,7 +192,7 @@ public class NetplayUser {
             this.UserName1 = parts[2];
             this.Site1 = parts[3];
             this.SiteID1 = parts[4];
-            this.RoomLimit1 = parts[5];
+            this.RoomLimit1 = int.Parse(parts[5]);
             this.Password1 = parts[6];
             /*
             Console.WriteLine("Open Room");

@@ -161,7 +161,7 @@ public class Server
                 //We are now connected
                 
                 NetplayUser connection = new NetplayUser(handler);
-                connection.listen(this.netplay, connection);
+                connection.Listen(this.netplay, connection);
                 
             }
         }

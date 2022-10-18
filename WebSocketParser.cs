@@ -1,13 +1,8 @@
 using System;
-using System.IO;
-using System.Net;
 using System.Net.Sockets;
 using System.Text;
-using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text.RegularExpressions;
 using System.Threading;
 
 public class WebSocketParser {
@@ -62,7 +57,7 @@ public class WebSocketParser {
             parser.AddToQueue(header, data);
         }
     }
-    public String readBytesAsString() {
+    public string readBytesAsString() {
         byte[] res = this.readBytes(this.length);
         return Encoding.UTF8.GetString(res, 0, res.Length);
     }
@@ -81,7 +76,7 @@ public class WebSocketParser {
         }
         return decoded;
     }
-    public void writeString(String data) {
+    public void writeString(string data) {
         byte[] toWrite = Encoding.UTF8.GetBytes(data);
         AddToQueue(GetHeader((ulong)toWrite.Length, true), toWrite);
     }
@@ -139,31 +134,43 @@ public class WebSocketParser {
         try {
             handler.Shutdown(SocketShutdown.Both);
             handler.Close();
-        } catch(Exception e) {}
+        }
+        catch (Exception)
+        {
+            // ignored
+        }
     }
-    public bool tryRead() {
+    public bool TryRead() {
         if (handler.Available == 0 && handler.Connected) return false;
         if (!handler.Connected) return true;
-        byte[] head = new byte[2];
+        var head = new byte[2];
         handler.Receive(head, 0, 2, SocketFlags.None);
         this.inIsString = ((head[0]-128)==1);
-        bool mask = (head[1] & 0b10000000) != 0;
-        ulong msglen = (ulong)(head[1] & 0b01111111);
+        var mask = (head[1] & 0b10000000) != 0;
+        var msglen = (ulong)(head[1] & 0b01111111);
         
-        if (msglen == 126) {
-            byte[] size = new byte[2];
-            handler.Receive(size, 0, 2, SocketFlags.None);
-            msglen = (ulong)BitConverter.ToInt16(new byte[] { size[1], size[0] }, 0);
-        } else if (msglen == 127) {
-            byte[] size = new byte[8];
-            handler.Receive(size, 0, 8, SocketFlags.None);
-            msglen = BitConverter.ToUInt64(new byte[] { size[7], size[6], size[5], size[4], size[3], size[2], size[1], size[0] }, 0);
+        switch (msglen)
+        {
+            case 126:
+            {
+                var size = new byte[2];
+                handler.Receive(size, 0, 2, SocketFlags.None);
+                msglen = (ulong)BitConverter.ToInt16(new byte[] { size[1], size[0] }, 0);
+                break;
+            }
+            case 127:
+            {
+                var size = new byte[8];
+                handler.Receive(size, 0, 8, SocketFlags.None);
+                msglen = BitConverter.ToUInt64(new byte[] { size[7], size[6], size[5], size[4], size[3], size[2], size[1], size[0] }, 0);
+                break;
+            }
         }
-        this.length = msglen;
-        this.consumed = 0;
+        length = msglen;
+        consumed = 0;
         
         if (mask && msglen != 0) {
-            byte[] masks = new byte[4];
+            var masks = new byte[4];
             handler.Receive(masks, 0, 4, SocketFlags.None);
             this.mask[0] = masks[0];
             this.mask[1] = masks[1];

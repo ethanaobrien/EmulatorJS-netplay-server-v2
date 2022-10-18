@@ -1,146 +1,152 @@
 using System;
-using System.IO;
-using System.Net;
 using System.Net.Sockets;
-using System.Text;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.RegularExpressions;
 using System.Threading;
 
-public struct Room {
-    public List<NetplayUser> Users = new List<NetplayUser>();
-    public String name;
-    public String id;
-    public int MaxUsers;
+public class Room {
+    public readonly List<NetplayUser> Users;
+    public readonly string Name;
+    public readonly string Id;
+    public readonly int MaxUsers;
     public bool HasPassword;
-    public String Password;
-    public Room(String room, String id, int maxUsers) {
-        this.name = room;
-        this.id = id;
-        this.MaxUsers = maxUsers;
-        this.HasPassword = false;
-        this.Password = "";
+    public string Password;
+    public Room(string room, string id, int maxUsers) {
+        Users = new List<NetplayUser>();
+        Name = room;
+        Id = id;
+        MaxUsers = maxUsers;
+        HasPassword = false;
+        Password = "";
     }
-    public Room() {
-        this.name = "null";
-        this.id = "null";
-        this.MaxUsers = 0;
-        this.HasPassword = false;
-        this.Password = "";
+    public Room()
+    {
+        Users = new List<NetplayUser>();
+        Name = "null";
+        Id = "null";
+        MaxUsers = 0;
+        HasPassword = false;
+        Password = "";
     }
-    public void SetPassword(String Password) {
-        this.Password = Password;
-        this.HasPassword = true;
+    public void SetPassword(string password) {
+        Password = password;
+        HasPassword = true;
     }
-    public override bool Equals(object other) {
-        if(other is null) return false;
-        if(!(other is Room)) return false;
-        Room otherRoom = (Room) other;
-        return otherRoom.id.Equals(this.id);
+
+    public bool Equals(Room other)
+    {
+        return Equals(Users, other.Users) && Name == other.Name && Id == other.Id && MaxUsers == other.MaxUsers && HasPassword == other.HasPassword && Password == other.Password;
+    }
+
+    public override int GetHashCode()
+    {
+        return HashCode.Combine(Users, Name, Id, MaxUsers, HasPassword, Password);
     }
 
     public static bool operator ==(Room r1, Room r2) {
-        return r1.Equals(r2);
+        return r1 is not null && r1.Equals(r2);
     }
 
     public static bool operator !=(Room r1, Room r2) {
-        return !r1.Equals(r2);
+        return r1 is not null && !r1.Equals(r2);
     }
 }
 
+
 public class RoomsManager {
-    private List<Room> Rooms = new List<Room>();
-    public Room GetRoom(String site, String id, String name) {
-        foreach (Room room in Rooms) {
-            if (room.id.Equals(site+"-"+id+"-"+name)) {
-                return room;
-            }
+    private readonly List<Room> _rooms;
+
+    public RoomsManager()
+    {
+        _rooms = new List<Room>();
+    }
+    
+    public Room GetRoom(string site, string id, string name)
+    {
+        foreach (var room in _rooms.Where(room => room.Id.Equals(site+"-"+id+"-"+name)))
+        {
+            return room;
         }
+
         return new Room();
     }
-    public List<Room> GetRooms(String site, String id) {
-        List<Room> rooms = new List<Room>();
-        foreach (Room room in Rooms) {
-            if (room.id.StartsWith(site+"-"+id)) {
-                rooms.Add(room);
-            }
-        }
-        return rooms;
+    public IEnumerable<Room> GetRooms(string site, string id)
+    {
+        return _rooms.Where(room => room.Id.StartsWith(site + "-" + id)).ToList();
     }
-    public bool RoomExists(String room, String site, String id) {
-        return !(GetRoom(site, id, room).name.Equals("null"));
+    public bool RoomExists(string room, string site, string id) {
+        return !(GetRoom(site, id, room).Name.Equals("null"));
     }
-    public bool RoomFull(String room, String site, String id) {
-        Room room1 = GetRoom(site, id, room);
-        if (room1.name.Equals("null")) return true;
+    public bool RoomFull(string room, string site, string id) {
+        var room1 = GetRoom(site, id, room);
+        if (room1.Name.Equals("null")) return true;
         return (room1.Users.Count >= room1.MaxUsers);
     }
-    public String CreateRoom(NetplayUser user, String site, String id, String name, String Password, int MaxUsers) {
+    public string CreateRoom(NetplayUser user, string site, string id, string name, string password, int maxUsers) {
         if (RoomExists(name, site, id)) return "Room Already Exists";
-        Room room = new Room(name, site+"-"+id+"-"+name, MaxUsers);
-        if (Password.Trim().Length > 0) {
-            room.SetPassword(Password.Trim());
+        var room = new Room(name, site+"-"+id+"-"+name, maxUsers);
+        if (password.Trim().Length > 0) {
+            room.SetPassword(password.Trim());
         }
         room.Users.Add(user);
-        Rooms.Add(room);
+        _rooms.Add(room);
         return "";
     }
-    public String JoinRoom(NetplayUser user, String site, String id, String name, String Password) {
-        Room room = GetRoom(site, id, name);
-        if (room.name.Equals("null")) return "Room not found";
+    public string JoinRoom(NetplayUser user, string site, string id, string name, string password) {
+        var room = GetRoom(site, id, name);
+        if (room.Name.Equals("null")) return "Room not found";
         if (room.HasPassword) {
-            if (!Password.Equals(room.Password)) return "Incorrect Password";
+            if (!password.Equals(room.Password)) return "Incorrect Password";
         }
         room.Users.Add(user);
         return "";
     }
-    public void DeleteRoom(String site, String id, String name) {
+    public void DeleteRoom(string site, string id, string name) {
         Room room = GetRoom(site, id, name);
-        Rooms.Remove(room);
+        _rooms.Remove(room);
     }
-    public void RemoveUser(NetplayUser user, String site, String id, String name, String UserName) {
-        Room room = GetRoom(site, id, name);
-        if (room.name.Equals("null")) return;
+    public void RemoveUser(NetplayUser user, string site, string id, string name, string userName) {
+        var room = GetRoom(site, id, name);
+        if (room.Name.Equals("null")) return;
         room.Users.Remove(user);
     }
 }
 
 public class NetplayManager {
-    public RoomsManager manager = new RoomsManager();
-    public NetplayManager() {
+    public readonly RoomsManager Manager;
+    public NetplayManager()
+    {
+        Manager = new RoomsManager();
+    }
+    public string OpenRoom(NetplayUser user)
+    {
+        return Manager.RoomExists(user.RoomName, user.Site, user.SiteId) ? "Room Already Exists" : Manager.CreateRoom(user, user.Site, user.SiteId, user.RoomName, user.Password, user.RoomLimit);
+    }
+    public string JoinRoom(NetplayUser user) {
+        if (!Manager.RoomExists(user.RoomName, user.Site, user.SiteId)) return "Room does not exist!";
         
-    }
-    public String OpenRoom(NetplayUser user) {
-        if (manager.RoomExists(user.RoomName(), user.Site(), user.SiteID())) return "Room Already Exists";
-        return manager.CreateRoom(user, user.Site(), user.SiteID(), user.RoomName(), user.Password(), user.RoomLimit());
-    }
-    public String JoinRoom(NetplayUser user) {
-        if (!manager.RoomExists(user.RoomName(), user.Site(), user.SiteID())) return "Room does not exist!";
-        if (manager.RoomFull(user.RoomName(), user.Site(), user.SiteID())) return "Room full";
-        return manager.JoinRoom(user, user.Site(), user.SiteID(), user.RoomName(), user.Password());
+        return Manager.RoomFull(user.RoomName, user.Site, user.SiteId) ? "Room full" : Manager.JoinRoom(user, user.Site, user.SiteId, user.RoomName, user.Password);
     }
     public void DeleteRoom(NetplayUser user) {
-        manager.DeleteRoom(user.Site(), user.SiteID(), user.RoomName());
+        Manager.DeleteRoom(user.Site, user.SiteId, user.RoomName);
     }
     public void DisconnectFromRoom(NetplayUser user) {
-        manager.RemoveUser(user, user.Site(), user.SiteID(), user.RoomName(), user.UserName());
+        Manager.RemoveUser(user, user.Site, user.SiteId, user.RoomName, user.UserName);
     }
-    public String ListRooms(String url) {
-        if (url.IndexOf("?") == -1) return "[]";
-        String site = url.Substring(url.IndexOf("site=")+5).Split('&')[0];
-        String id = url.Substring(url.IndexOf("id=")+3).Split('&')[0];
-        String rv = "[";
-        List<Room> rooms = manager.GetRooms(site, id);
-        bool yes = false;
+    public string ListRooms(string url) {
+        if (!url.Contains('?')) return "[]";
+        var site = url[(url.IndexOf("site=", StringComparison.Ordinal)+5)..].Split('&')[0];
+        var id = url[(url.IndexOf("id=", StringComparison.Ordinal)+3)..].Split('&')[0];
+        var rv = "[";
+        var rooms = Manager.GetRooms(site, id);
+        var yes = false;
         foreach (Room room in rooms) {
             if (yes) {
                 rv += ",";
             }
             rv += (
                 "{"+
-                "\"name\": \""+room.name.Replace("\"", "\\\"")+"\","+
+                "\"name\": \""+room.Name.Replace("\"", "\\\"")+"\","+
                 "\"users\": "+room.Users.Count+","+
                 "\"max_users\": "+room.MaxUsers+","+
                 "\"password\": "+(room.HasPassword?"true":"false")+
@@ -154,46 +160,40 @@ public class NetplayManager {
 }
 
 public class NetplayUser {
-    public Socket handler;
-    private bool debug = true;
-    public WebSocketParser Connection;
-    private String RoomName1;
-    public String RoomName() {return this.RoomName1;}
-    private String UserName1;
-    public String UserName() {return this.UserName1;}
-    private String Site1;
-    public String Site() {return this.Site1;}
-    private String SiteID1;
-    public String SiteID() {return this.SiteID1;}
+
+    private readonly Socket _handler;
+    private const bool Debug = true;
+    public readonly WebSocketParser Connection;
+    public string RoomName { get; private set; }
+    public string UserName { get; private set; }
+    public string Site { get; private set; }
+    public string SiteId { get; private set; }
+    public int RoomLimit { get; private set; }
+    public string Password { get; private set; }
+    private bool IsOwner { get; set; }
     
-    private int RoomLimit1;
-    public int RoomLimit() {return this.RoomLimit1;}
-    private String Password1;
-    public String Password() {return this.Password1;}
-    
-    private bool IsOwner1 = false;
-    public bool IsOwner() {return this.IsOwner1;}
     public NetplayUser(Socket handler) {
-        this.handler = handler;
+        this._handler = handler;
         this.Connection = new WebSocketParser(handler);
+        IsOwner = false;
     }
-    public void listen(NetplayManager netplay, NetplayUser user) {
-        while (!Connection.tryRead()) {
+    public void Listen(NetplayManager netplay, NetplayUser user) {
+        while (!Connection.TryRead()) {
             Thread.Sleep(10);
         };
         if (!Connection.clientConnected()) return;
         //Once we connect the user - we do nothing. Mostly everything is client site
         //(It's cheaper and easier that way).
-        String request = Connection.readBytesAsString();
-        String[] parts = request.Split('\n');
+        var request = Connection.readBytesAsString();
+        var parts = request.Split('\n');
         if (parts[0].Equals("OpenRoom")) {
-            this.IsOwner1 = true;
-            this.RoomName1 = parts[1];
-            this.UserName1 = parts[2];
-            this.Site1 = parts[3];
-            this.SiteID1 = parts[4];
-            this.RoomLimit1 = int.Parse(parts[5]);
-            this.Password1 = parts[6];
+            IsOwner = true;
+            RoomName = parts[1];
+            UserName = parts[2];
+            Site = parts[3];
+            SiteId = parts[4];
+            RoomLimit = int.Parse(parts[5]);
+            Password = parts[6];
             /*
             Console.WriteLine("Open Room");
             Console.WriteLine("Room Name: "+parts[1]);
@@ -201,36 +201,36 @@ public class NetplayUser {
             Console.WriteLine("Site: "+parts[3]);
             Console.WriteLine("Site ID: "+parts[4]);
             */
-            String joined = netplay.OpenRoom(user);
+            var joined = netplay.OpenRoom(user);
             if (joined.Trim().Length > 0) {
-                this.Connection.writeString(joined.Trim());
-                this.Connection.closeSocket();
+                Connection.writeString(joined.Trim());
+                Connection.closeSocket();
                 return;
             }
-            this.Connection.writeString("Connected");
+            Connection.writeString("Connected");
         } else if (request.Split('\n')[0].Equals("JoinRoom")) {
-            this.IsOwner1 = false;
-            this.RoomName1 = parts[1];
-            this.UserName1 = parts[2];
-            this.Site1 = parts[3];
-            this.SiteID1 = parts[4];
-            this.Password1 = parts[5];
-            this.RoomLimit1 = 0;
-            String joined = netplay.JoinRoom(user);
+            IsOwner = false;
+            RoomName = parts[1];
+            UserName = parts[2];
+            Site = parts[3];
+            SiteId = parts[4];
+            Password = parts[5];
+            RoomLimit = 0;
+            var joined = netplay.JoinRoom(user);
             if (joined.Trim().Length > 0) {
                 this.Connection.writeString(joined.Trim());
                 this.Connection.closeSocket();
                 return;
             }
             this.Connection.writeString("Connected");
-            Room room = netplay.manager.GetRoom(Site1, SiteID1, RoomName1);
-            if (room.name.Equals("null")) {
+            var room = netplay.Manager.GetRoom(Site, SiteId, RoomName);
+            if (room.Name.Equals("null")) {
                 this.Connection.writeString("Error Connecting");
                 this.Connection.closeSocket();
                 return;
             }
             foreach (var client in room.Users) {
-                client.Connection.writeString("User Connected: "+this.UserName1);
+                client.Connection.writeString("User Connected: "+UserName);
             }
         } else {
             this.Connection.closeSocket();
@@ -239,14 +239,14 @@ public class NetplayUser {
         try {
             while (true)
             {
-                while (!Connection.tryRead()) {
+                while (!Connection.TryRead()) {
                     Thread.Sleep(10);
                 };
                 if (!Connection.clientConnected()) break;
                 
-                Room room = netplay.manager.GetRoom(Site1, SiteID1, RoomName1);
-                if (room.name.Equals("null")) {
-                    this.Connection.closeSocket();
+                var room = netplay.Manager.GetRoom(Site, SiteId, RoomName);
+                if (room.Name.Equals("null")) {
+                    Connection.closeSocket();
                     break;
                 }
                 //We (the server) dont need to monitor the data after the initial connection
@@ -254,39 +254,56 @@ public class NetplayUser {
                 Connection.streamBytes(room);
                 
             }
-        } catch(Exception e) {}
-        
-        if (IsOwner1) {
+        }
+        catch (Exception)
+        {
+            // ignored
+        }
+
+        if (IsOwner) {
             netplay.DeleteRoom(user);
         } else {
             netplay.DisconnectFromRoom(user);
-            Room room = netplay.manager.GetRoom(Site1, SiteID1, RoomName1);
-            if (room.name.Equals("null")) return;
+            var room = netplay.Manager.GetRoom(Site, SiteId, RoomName);
+            if (room.Name.Equals("null")) return;
             foreach (var client in room.Users) {
-                client.Connection.writeString("User Disconnected: "+this.UserName1);
+                client.Connection.writeString("User Disconnected: "+UserName);
             }
         }
     }
-    public override bool Equals(object other) {
-        NetplayUser OtherUser = other as NetplayUser;
-        if(OtherUser is null) {
-            return false;
-        }
-        return (
-            OtherUser.RoomName().Equals(this.RoomName()) &&
-            OtherUser.UserName().Equals(this.UserName()) &&
-            OtherUser.Site().Equals(this.Site()) &&
-            OtherUser.SiteID().Equals(this.SiteID()) &&
-            OtherUser.RoomLimit().Equals(this.RoomLimit()) &&
-            OtherUser.Password().Equals(this.Password())
-        );
-    }
-    public static bool operator ==(NetplayUser u1, NetplayUser u2) {
+    public static bool operator == (NetplayUser u1, NetplayUser u2) {
         if(u1 is null) return false;
         return u1.Equals(u2);
     }
-    public static bool operator !=(NetplayUser u1, NetplayUser u2) {
+    public static bool operator != (NetplayUser u1, NetplayUser u2) {
         if(u1 is null) return false;
         return !u1.Equals(u2);
+    }
+    
+    public override bool Equals(object obj)
+    {
+        if (ReferenceEquals(null, obj)) return false;
+        if (ReferenceEquals(this, obj)) return true;
+        return obj.GetType() == this.GetType() && Equals((NetplayUser) obj);
+    }
+    
+    protected bool Equals(NetplayUser other)
+    {
+        return Equals(_handler, other._handler) && Equals(Connection, other.Connection) && RoomName == other.RoomName && UserName == other.UserName && Site == other.Site && SiteId == other.SiteId && RoomLimit == other.RoomLimit && Password == other.Password && IsOwner == other.IsOwner;
+    }
+
+    public override int GetHashCode()
+    {
+        var hashCode = new HashCode();
+        hashCode.Add(_handler);
+        hashCode.Add(Connection);
+        hashCode.Add(RoomName);
+        hashCode.Add(UserName);
+        hashCode.Add(Site);
+        hashCode.Add(SiteId);
+        hashCode.Add(RoomLimit);
+        hashCode.Add(Password);
+        hashCode.Add(IsOwner);
+        return hashCode.ToHashCode();
     }
 }

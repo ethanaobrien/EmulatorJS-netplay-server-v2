@@ -1,204 +1,215 @@
 using System;
-using System.Net.Sockets;
-using System.Text;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
+using System.Net.Sockets;
+using System.Text;
 using System.Threading;
 
-public class WebSocketParser {
-    public byte[] mask = new byte[4];
-    public ulong length = 0;
-    private ulong consumed = 0;
-    public Socket handler = null;
-    public bool inIsString = false;
-    ConcurrentQueue<List<byte[]>> WriteBuffer = new ConcurrentQueue<List<byte[]>>();
-    public void AddToQueue(byte[] header, byte[] data) {
-        List<byte[]> ToAdd = new List<byte[]>();
-        ToAdd.Add(header);
-        ToAdd.Add(data);
-        WriteBuffer.Enqueue(ToAdd);
-    }
-    public void ProcessQueue() {
-        while (this.handler.Connected) {
-            try {
-                while (WriteBuffer.Count == 0 && this.handler.Connected) {
-                    Thread.Sleep(10);
-                }
-                if (!this.handler.Connected) return;
-                List<byte[]> data;
-                while (WriteBuffer.TryDequeue(out data)) {
-                    foreach (byte[] ToWrite in data) {
-                        this.handler.Send(ToWrite);
+namespace main
+{
+    public class WebSocketParser {
+        private readonly byte[] _mask;
+        private ulong _length;
+        private ulong _consumed;
+        private readonly SocketManager _handler;
+        private bool _inIsString;
+        public WebSocketParser()
+        {
+            _mask = new byte[4];
+            _length = 0;
+            _consumed = 0;
+            _handler = null;
+            _inIsString = false;
+        }
+        
+        readonly ConcurrentQueue<List<byte[]>> _writeBuffer = new ConcurrentQueue<List<byte[]>>();
+        
+        private void AddToQueue(byte[] header, byte[] data) {
+            var toAdd = new List<byte[]> {header, data};
+            _writeBuffer.Enqueue(toAdd);
+        }
+        private void ProcessQueue() {
+            while (_handler.Connected) {
+                try {
+                    while (_writeBuffer.IsEmpty && _handler.Connected) {
+                        Thread.Sleep(10);
+                    }
+                    if (!_handler.Connected) return;
+                    while (_writeBuffer.TryDequeue(out var data)) {
+                        foreach (var toWrite in data) {
+                            _handler.Send(toWrite);
+                        }
                     }
                 }
-            } catch(Exception e) {}
-        }
-    }
-
-
-    public WebSocketParser(Socket handler) {
-        this.handler = handler;
-        Thread t = new Thread(ProcessQueue);
-        t.Start();
-    }
-    public void streamBytes(Room room) {
-        var dest = new List<WebSocketParser>();
-        foreach (var user in room.Users) {
-            dest.Add(user.Connection);
-        }
-        streamBytes(dest);
-    }
-    public void streamBytes(List<WebSocketParser> dest) {
-        if (dest.Count == 0) return;
-        List<int> queue = new List<int>();
-        byte[] header = GetHeader(this.length-this.consumed, this.inIsString);
-        byte[] data = this.readBytes(this.length-this.consumed);
-        foreach(var parser in dest) {
-            parser.AddToQueue(header, data);
-        }
-    }
-    public string readBytesAsString() {
-        byte[] res = this.readBytes(this.length);
-        return Encoding.UTF8.GetString(res, 0, res.Length);
-    }
-    public byte[] readBytes() {
-        return this.readBytes(this.length);
-    }
-    public byte[] readBytes(ulong len) {
-        if (this.length-this.consumed < len) {
-            len = this.length-this.consumed;
-        }
-        byte[] decoded = new byte[len];
-        byte[] bytes = new byte[len];
-        handler.Receive(bytes, 0, (int)len, SocketFlags.None);
-        for (ulong i=0; i < len; ++i, ++this.consumed) {
-            decoded[i] = (byte)(bytes[i] ^ mask[this.consumed % 4]);
-        }
-        return decoded;
-    }
-    public void writeString(string data) {
-        byte[] toWrite = Encoding.UTF8.GetBytes(data);
-        AddToQueue(GetHeader((ulong)toWrite.Length, true), toWrite);
-    }
-    public void writeBytes(byte[] data) {
-        AddToQueue(GetHeader((ulong)data.Length, false), data);
-    }
-    public void writeBytes(byte[] data, bool isString) {
-        AddToQueue(GetHeader((ulong)data.Length, isString), data);
-    }
-    public byte[] GetHeader(ulong len, bool isString) {
-        //Credit to https://github.com/MazyModz/CSharp-WebSocket-Server/blob/master/Library/Helpers.cs
-        int indexStartRawData = -1;
-        byte[] frame = new byte[10];
-
-        frame[0] = (byte)(128 + (isString?1:2));
-        if (len <= 125)
-        {
-            frame[1] = (byte)len;
-            indexStartRawData = 2;
-        }
-        else if (len >= 126 && len <= 65535)
-        {
-            frame[1] = (byte)126;
-            frame[2] = (byte)((len >> 8) & 255);
-            frame[3] = (byte)(len & 255);
-            indexStartRawData = 4;
-        }
-        else
-        {
-            frame[1] = (byte)127;
-            frame[2] = (byte)((len >> 56) & 255);
-            frame[3] = (byte)((len >> 48) & 255);
-            frame[4] = (byte)((len >> 40) & 255);
-            frame[5] = (byte)((len >> 32) & 255);
-            frame[6] = (byte)((len >> 24) & 255);
-            frame[7] = (byte)((len >> 16) & 255);
-            frame[8] = (byte)((len >> 8) & 255);
-            frame[9] = (byte)(len & 255);
-            indexStartRawData = 10;
-        }
-        if (indexStartRawData == -1) return new byte[0];
-        byte[] response = new byte[indexStartRawData];
-        for (int i=0; i < indexStartRawData; i++) {
-            response[i] = frame[i];
-        }
-        return response;
-    }
-    public bool clientConnected() {
-        return handler.Connected;
-    }
-    public void closeSocket() {
-        while (WriteBuffer.Count > 0) {
-            Thread.Sleep(10);
-        }
-        try {
-            handler.Shutdown(SocketShutdown.Both);
-            handler.Close();
-        }
-        catch (Exception)
-        {
-            // ignored
-        }
-    }
-    public bool TryRead() {
-        if (handler.Available == 0 && handler.Connected) return false;
-        if (!handler.Connected) return true;
-        var head = new byte[2];
-        handler.Receive(head, 0, 2, SocketFlags.None);
-        this.inIsString = ((head[0]-128)==1);
-        var mask = (head[1] & 0b10000000) != 0;
-        var msglen = (ulong)(head[1] & 0b01111111);
-        
-        switch (msglen)
-        {
-            case 126:
-            {
-                var size = new byte[2];
-                handler.Receive(size, 0, 2, SocketFlags.None);
-                msglen = (ulong)BitConverter.ToInt16(new byte[] { size[1], size[0] }, 0);
-                break;
-            }
-            case 127:
-            {
-                var size = new byte[8];
-                handler.Receive(size, 0, 8, SocketFlags.None);
-                msglen = BitConverter.ToUInt64(new byte[] { size[7], size[6], size[5], size[4], size[3], size[2], size[1], size[0] }, 0);
-                break;
+                catch (Exception)
+                {
+                    // ignored
+                }
             }
         }
-        length = msglen;
-        consumed = 0;
+
+
+        public WebSocketParser(SocketManager handler) {
+            this._handler = handler;
+            var t = new Thread(ProcessQueue);
+            t.Start();
+        }
+        public void StreamBytes(Room room) {
+            var dest = room.Users.Select(user => user.Connection).ToList();
+            StreamBytes(dest);
+        }
+
+        private void StreamBytes(IReadOnlyCollection<WebSocketParser> dest) {
+            if (dest.Count == 0) return;
+            var header = GetHeader(_length-_consumed, _inIsString);
+            var data = ReadBytes(_length-_consumed);
+            foreach(var parser in dest) {
+                parser.AddToQueue(header, data);
+            }
+        }
+        public string ReadBytesAsString() {
+            var res = ReadBytes(_length);
+            return Encoding.UTF8.GetString(res, 0, res.Length);
+        }
+        public byte[] ReadBytes() {
+            return ReadBytes(_length);
+        }
+
+        public byte[] ReadBytes(ulong len) {
+            if (_length-_consumed < len) {
+                len = _length-_consumed;
+            }
+            byte[] decoded = new byte[len];
+            byte[] bytes = new byte[len];
+            _handler.Receive(bytes, 0, (int)len, SocketFlags.None);
+            for (ulong i=0; i < len; ++i, ++_consumed) {
+                decoded[i] = (byte)(bytes[i] ^ _mask[_consumed % 4]);
+            }
+            return decoded;
+        }
+        public void WriteString(string data) {
+            var toWrite = Encoding.UTF8.GetBytes(data);
+            AddToQueue(GetHeader((ulong)toWrite.Length, true), toWrite);
+        }
+        public void WriteBytes(byte[] data) {
+            AddToQueue(GetHeader((ulong)data.Length, false), data);
+        }
+        public void WriteBytes(byte[] data, bool isString) {
+            AddToQueue(GetHeader((ulong)data.Length, isString), data);
+        }
+
+        private byte[] GetHeader(ulong len, bool isString) {
+            //Credit to https://github.com/MazyModz/CSharp-WebSocket-Server/blob/master/Library/Helpers.cs
+            int indexStartRawData;
+            var frame = new byte[10];
+
+            frame[0] = (byte)(128 + (isString?1:2));
+            switch (len)
+            {
+                case <= 125:
+                    frame[1] = (byte)len;
+                    indexStartRawData = 2;
+                    break;
+                case >= 126 and <= 65535:
+                    frame[1] = (byte)126;
+                    frame[2] = (byte)((len >> 8) & 255);
+                    frame[3] = (byte)(len & 255);
+                    indexStartRawData = 4;
+                    break;
+                default:
+                    frame[1] = (byte)127;
+                    frame[2] = (byte)((len >> 56) & 255);
+                    frame[3] = (byte)((len >> 48) & 255);
+                    frame[4] = (byte)((len >> 40) & 255);
+                    frame[5] = (byte)((len >> 32) & 255);
+                    frame[6] = (byte)((len >> 24) & 255);
+                    frame[7] = (byte)((len >> 16) & 255);
+                    frame[8] = (byte)((len >> 8) & 255);
+                    frame[9] = (byte)(len & 255);
+                    indexStartRawData = 10;
+                    break;
+            }
+
+            var response = new byte[indexStartRawData];
+            for (var i=0; i < indexStartRawData; i++) {
+                response[i] = frame[i];
+            }
+            return response;
+        }
+        public bool ClientConnected() {
+            return _handler.Connected;
+        }
+        public void CloseSocket() {
+            while (_writeBuffer.IsEmpty) {
+                Thread.Sleep(10);
+            }
+            try {
+                _handler.Shutdown(SocketShutdown.Both);
+                _handler.Close();
+            }
+            catch (Exception)
+            {
+                // ignored
+            }
+        }
+        public bool TryRead() {
+            if (_handler.Available == 0 && _handler.Connected) return false;
+            if (!_handler.Connected) return true;
+            var head = new byte[2];
+            _handler.Receive(head, 0, 2, SocketFlags.None);
+            _inIsString = ((head[0]-128)==1);
+            var mask = (head[1] & 0b10000000) != 0;
+            var msglen = (ulong)(head[1] & 0b01111111);
         
-        if (mask && msglen != 0) {
-            var masks = new byte[4];
-            handler.Receive(masks, 0, 4, SocketFlags.None);
-            this.mask[0] = masks[0];
-            this.mask[1] = masks[1];
-            this.mask[2] = masks[2];
-            this.mask[3] = masks[3];
-        } else {
-            this.closeSocket();
+            switch (msglen)
+            {
+                case 126:
+                {
+                    var size = new byte[2];
+                    _handler.Receive(size, 0, 2, SocketFlags.None);
+                    msglen = (ulong)BitConverter.ToInt16(new[] { size[1], size[0] }, 0);
+                    break;
+                }
+                case 127:
+                {
+                    var size = new byte[8];
+                    _handler.Receive(size, 0, 8, SocketFlags.None);
+                    msglen = BitConverter.ToUInt64(new[] { size[7], size[6], size[5], size[4], size[3], size[2], size[1], size[0] }, 0);
+                    break;
+                }
+            }
+            _length = msglen;
+            _consumed = 0;
+        
+            if (mask && msglen != 0) {
+                var masks = new byte[4];
+                _handler.Receive(masks, 0, 4, SocketFlags.None);
+                _mask[0] = masks[0];
+                _mask[1] = masks[1];
+                _mask[2] = masks[2];
+                _mask[3] = masks[3];
+            } else {
+                CloseSocket();
+            }
+            return true;
         }
-        return true;
-    }
-    public override int GetHashCode() {
-        return this.handler.GetHashCode();
-    }
-    public override bool Equals(object otherObj) {
-        WebSocketParser other = otherObj as WebSocketParser;
-        if(other == null) {
-            return false;
+        public override int GetHashCode() {
+            return _handler.GetHashCode();
         }
-        return other.handler.Equals(handler);
-    }
+        public override bool Equals(object otherObj) {
+            var other = otherObj as WebSocketParser;
+            return other != null && other._handler.Equals(_handler);
+        }
 
-    public static bool operator ==(WebSocketParser p1, WebSocketParser p2) {
-        if(p1 is null) return false;
-        return p1.Equals(p2);
-    }
+        public static bool operator == (WebSocketParser p1, WebSocketParser p2)
+        {
+            return p1 is not null && p1.Equals(p2);
+        }
 
-     public static bool operator !=(WebSocketParser p1, WebSocketParser p2) {
-        if(p1 is null) return false;
-        return !p1.Equals(p2);
+        public static bool operator != (WebSocketParser p1, WebSocketParser p2) {
+            if(p1 is null) return false;
+            return !p1.Equals(p2);
+        }
     }
 }

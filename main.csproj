@@ -5,10 +5,12 @@
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <OutputType>Exe</OutputType>
     <TargetFramework>netcoreapp6.0</TargetFramework>
-		<StartupObject>main</StartupObject>
+		<StartupObject>main.main</StartupObject>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Main.cs" />
+    <Compile Include="Server.cs" />
+    <Compile Include="Socket.cs" />
     <Compile Include="WebSocketParser.cs" />
     <Compile Include="ejs_netplay.cs" />
   </ItemGroup>

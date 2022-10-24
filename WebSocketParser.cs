@@ -14,14 +14,6 @@ namespace main
         private ulong _consumed;
         private readonly SocketManager _handler;
         private bool _inIsString;
-        public WebSocketParser()
-        {
-            _mask = new byte[4];
-            _length = 0;
-            _consumed = 0;
-            _handler = null;
-            _inIsString = false;
-        }
         
         readonly ConcurrentQueue<List<byte[]>> _writeBuffer = new ConcurrentQueue<List<byte[]>>();
         
@@ -51,7 +43,11 @@ namespace main
 
 
         public WebSocketParser(SocketManager handler) {
-            this._handler = handler;
+            _mask = new byte[4];
+            _length = 0;
+            _consumed = 0;
+            _inIsString = false;
+            _handler = handler;
             var t = new Thread(ProcessQueue);
             t.Start();
         }

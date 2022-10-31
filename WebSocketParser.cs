@@ -14,8 +14,9 @@ namespace main
         private ulong _consumed;
         private readonly SocketManager _handler;
         private bool _inIsString;
+        private readonly bool _echo;
         
-        readonly ConcurrentQueue<List<byte[]>> _writeBuffer = new ConcurrentQueue<List<byte[]>>();
+        readonly ConcurrentQueue<List<byte[]>> _writeBuffer;
         
         private void AddToQueue(byte[] header, byte[] data) {
             var toAdd = new List<byte[]> {header, data};
@@ -42,12 +43,14 @@ namespace main
         }
 
 
-        public WebSocketParser(SocketManager handler) {
+        public WebSocketParser(SocketManager handler, bool echo) {
+            _writeBuffer = new ConcurrentQueue<List<byte[]>>();
             _mask = new byte[4];
             _length = 0;
             _consumed = 0;
             _inIsString = false;
             _handler = handler;
+            _echo = echo;
             var t = new Thread(ProcessQueue);
             t.Start();
         }
@@ -61,6 +64,7 @@ namespace main
             var header = GetHeader(_length-_consumed, _inIsString);
             var data = ReadBytes(_length-_consumed);
             foreach(var parser in dest) {
+                if (!_echo && Equals(parser._handler, _handler)) continue;
                 parser.AddToQueue(header, data);
             }
         }
@@ -137,7 +141,7 @@ namespace main
             return _handler.Connected;
         }
         public void CloseSocket() {
-            while (_writeBuffer.IsEmpty) {
+            while (!_writeBuffer.IsEmpty) {
                 Thread.Sleep(10);
             }
             try {

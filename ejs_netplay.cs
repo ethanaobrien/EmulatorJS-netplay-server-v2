@@ -43,11 +43,16 @@ namespace main
         }
 
         public static bool operator == (Room r1, Room r2) {
-            return r1 is not null && r1.Equals(r2);
+            return r1 is not null && r2 is not null && r1.Equals(r2);
         }
 
         public static bool operator != (Room r1, Room r2) {
-            return r1 is not null && !r1.Equals(r2);
+            if (r1 is not null && r2 is not null) {
+                return !r1.Equals(r2);
+            } else if (r1 is null && r2 is null) {
+                return false;
+            }
+            return true;
         }
     }
 
@@ -62,14 +67,12 @@ namespace main
     
         public Room GetRoom(string site, string id, string name)
         {
-            foreach (var room in _rooms.Where(room => room.Id.Equals(site+"-"+id+"-"+name)))
-            {
-                return room;
-            }
+            var rooms = _rooms.Where(room => room.Id == (site+"-"+id+"-"+name)).ToList();
 
+            if (rooms.Count > 0) return rooms[0];
             return null;
         }
-        public IEnumerable<Room> GetRooms(string site, string id)
+        public List<Room> GetRooms(string site, string id)
         {
             return _rooms.Where(room => room.Id.StartsWith(site + "-" + id)).ToList();
         }
@@ -134,13 +137,13 @@ namespace main
         }
         public string ListRooms(string url) {
             if (!url.Contains('?')) return "[]";
-            var site = url[(url.IndexOf("site=", StringComparison.Ordinal)+5)..].Split('&')[0];
+            var site = url[(url.IndexOf("domain=", StringComparison.Ordinal)+7)..].Split('&')[0];
             var id = url[(url.IndexOf("id=", StringComparison.Ordinal)+3)..].Split('&')[0];
             var rv = "[";
             var rooms = Manager.GetRooms(site, id);
-            var yes = false;
-            foreach (Room room in rooms) {
-                if (yes) {
+            for (int i=0; i<rooms.Count; i++) { 
+                var room = rooms[i];
+                if (i>0) {
                     rv += ",";
                 }
                 rv += (
@@ -151,7 +154,6 @@ namespace main
                     "\"password\": "+(room.HasPassword?"true":"false")+
                     "}"
                 );
-                yes = true;
             }
             rv += "]";
             return rv;
@@ -172,7 +174,7 @@ namespace main
     
         public NetplayUser(SocketManager handler) {
             _handler = handler;
-            Connection = new WebSocketParser(handler);
+            Connection = new WebSocketParser(handler, false);
             IsOwner = false;
         }
         public void Listen(NetplayManager netplay, NetplayUser user) {
@@ -201,6 +203,7 @@ namespace main
             Console.WriteLine("Site ID: "+parts[4]);
             */
                 var joined = netplay.OpenRoom(user);
+                Console.WriteLine(joined);
                 if (joined.Trim().Length > 0) {
                     Connection.WriteString(joined.Trim());
                     Connection.CloseSocket();
@@ -221,13 +224,13 @@ namespace main
                     Connection.CloseSocket();
                     return;
                 }
-                Connection.WriteString("Connected");
                 var room = netplay.Manager.GetRoom(Site, SiteId, RoomName);
                 if (room == null) {
                     Connection.WriteString("Error Connecting");
                     Connection.CloseSocket();
                     return;
                 }
+                Connection.WriteString("Connected");
                 foreach (var client in room.Users) {
                     client.Connection.WriteString("User Connected: "+UserName);
                 }
@@ -255,17 +258,18 @@ namespace main
                 
                 }
             }
-            catch (Exception)
+            catch (Exception e)
             {
-                // ignored
+                Console.WriteLine(e);
             }
+                Console.WriteLine("delete room");
 
             if (IsOwner) {
                 netplay.DeleteRoom(user);
             } else {
                 netplay.DisconnectFromRoom(user);
                 var room = netplay.Manager.GetRoom(Site, SiteId, RoomName);
-                if (room.Name.Equals("null")) return;
+                if (room == null) return;
                 foreach (var client in room.Users) {
                     client.Connection.WriteString("User Disconnected: "+UserName);
                 }
